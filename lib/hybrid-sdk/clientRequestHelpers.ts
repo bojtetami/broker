@@ -14,6 +14,7 @@ import stream from 'stream';
 import { streamsStore } from './http/server-post-stream-handler';
 import { maskToken } from './common/utils/token';
 import { makeRequestToDownstream } from './http/request';
+import { sanitizeRequestUrl } from './http/urlValidation';
 
 export class HybridClientRequestHandler {
   logContext: ExtendedLogContext;
@@ -206,7 +207,7 @@ export class HybridClientRequestHandler {
     )}`;
 
     const filteredReq = {
-      url: requestUri.toString(),
+      url: sanitizeRequestUrl(requestUri.toString()),
       method: this.req.method,
       body: this.req.body,
       headers: this.req.headers,

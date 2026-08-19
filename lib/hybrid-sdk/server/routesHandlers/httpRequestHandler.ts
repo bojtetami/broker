@@ -7,6 +7,7 @@ import { hostname } from 'node:os';
 import { URL, URLSearchParams } from 'node:url';
 import { PostFilterPreparedRequest } from '../../../broker-workload/prepareRequest';
 import { makeStreamingRequestToDownstream } from '../../http/request';
+import { sanitizeRequestUrl, assertSafeForwardHostname } from '../../http/urlValidation';
 
 export const overloadHttpRequestWithConnectionDetailsMiddleware = async (
   req: Request,
@@ -29,12 +30,14 @@ export const overloadHttpRequestWithConnectionDetailsMiddleware = async (
       localHostname.endsWith('-1') &&
       localHostname.match(regex)
     ) {
+      assertSafeForwardHostname(req.hostname)
       const url = new URL(`http://${req.hostname}${req.url}`);
       url.hostname = req.hostname.replace(/-[0-9]{1,2}\./, '.');
+      assertSafeForwardHostname(url.hostname)
       url.searchParams.append('connection_role', 'primary');
 
       const postFilterPreparedRequest: PostFilterPreparedRequest = {
-        url: url.toString(),
+        url: sanitizeRequestUrl(url.toString()),
         headers: req.headers,
         method: req.method,
       };

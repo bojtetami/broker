@@ -3,6 +3,7 @@ import { maskToken } from '../../common/utils/token';
 import { log as logger } from '../../../logs/logger';
 import { PostFilterPreparedRequest } from '../../../broker-workload/prepareRequest';
 import { makeSingleRawRequestToDownstream } from '../../http/request';
+import { sanitizeRequestUrl } from '../../http/urlValidation';
 
 export const validateBrokerClientCredentials = async (
   authHeaderValue: string,
@@ -10,6 +11,9 @@ export const validateBrokerClientCredentials = async (
   brokerConnectionIdentifier: string,
   isInternalJwt = false,
 ) => {
+  if (!/^[a-zA-Z0-9._-]+$/.test(brokerConnectionIdentifier)) {
+    return false;
+  }
   const body = {
     data: {
       type: 'broker_connection',
@@ -23,7 +27,7 @@ export const validateBrokerClientCredentials = async (
     ? `${getConfig().authorizationService}`
     : `${getConfig().apiHostname}`;
   const req: PostFilterPreparedRequest = {
-    url: `${serviceHostname}/hidden/brokers/connections/${brokerConnectionIdentifier}/auth/validate?version=2024-02-08~experimental`,
+    url: sanitizeRequestUrl(`${serviceHostname}/hidden/brokers/connections/${encodeURIComponent(brokerConnectionIdentifier)}/auth/validate?version=2024-02-08~experimental`),
     headers: {
       authorization: authHeaderValue,
       'Content-type': 'application/vnd.api+json',

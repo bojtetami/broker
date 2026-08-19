@@ -9,7 +9,39 @@ import { PostFilterPreparedRequest } from '../../broker-workload/prepareRequest'
 import { getConfig } from '../common/config/config';
 import { extractBrokerTokenFromUrl, maskToken } from '../common/utils/token';
 import { switchToInsecure } from './utils';
+import { sanitizeRequestUrl } from './urlValidation';
 import version from '../common/utils/version';
+
+const HOSTNAME_PATTERN = /^[a-z0-9.-]+$/;
+
+function buildDownstreamRequestOptions (rawUrl: string): {
+  useHttps: boolean;
+  hostname: string;
+  port: number;
+  path: string;
+} {
+  const sanitized = sanitizeRequestUrl(rawUrl);
+  const parsed = new URL(sanitized);
+  const hostnameMatch = parsed.hostname.toLowerCase().match(/^([a-z0-9.-]+)$/);
+  if (!hostnameMatch) {
+    throw new Error('URL host is not allowed');
+  }
+  const pathValue = `${parsed.pathname}${parsed.search}`;
+  const pathMatch = pathValue.match(/^(\/[^\0]*)$/);
+  if (!pathMatch || pathMatch[1].includes('..')) {
+    throw new Error('Invalid path');
+  }
+  const port = parsed.port ? Number(parsed.port) : (parsed.protocol === 'https:' ? 443 : 80);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error('Invalid port');
+  }
+  return {
+    useHttps: parsed.protocol === 'https:',
+    hostname: hostnameMatch[1],
+    port,
+    path: pathMatch[1],
+  };
+}
 export interface HttpResponse {
   headers: Object;
   statusCode: number | undefined;
@@ -37,6 +69,8 @@ export const makeRequestToDownstream = async (
   if (config.INSECURE_DOWNSTREAM) {
     localRequest.url = switchToInsecure(localRequest.url);
   }
+  localRequest.url = sanitizeRequestUrl(localRequest.url);
+  const requestTarget = buildDownstreamRequestOptions(localRequest.url);
   const proxyUri = getProxyForUrl(localRequest.url);
   if (proxyUri) {
     bootstrap({
@@ -46,17 +80,18 @@ export const makeRequestToDownstream = async (
   localRequest.headers['x-broker-origin-ua'] =
     localRequest.headers['user-agent'] ?? 'not-provided';
   localRequest.headers['user-agent'] = `Snyk Broker Client ${version}`;
-  const httpClient = localRequest.url.startsWith('https') ? https : http;
+  const httpClient = requestTarget.useHttps ? https : http;
   const options: http.RequestOptions = {
+    hostname: requestTarget.hostname,
+    port: requestTarget.port,
+    path: requestTarget.path,
     method: localRequest.method,
     headers: localRequest.headers as any,
   };
 
   return new Promise<HttpResponse>((resolve, reject) => {
     try {
-      // deepcode ignore Ssrf: re-ignore after http client refactoring
       const request = httpClient.request(
-        localRequest.url,
         options,
         (response) => {
           let data = '';
@@ -167,6 +202,8 @@ export const makeStreamingRequestToDownstream = (
   if (config.INSECURE_DOWNSTREAM) {
     localRequest.url = switchToInsecure(localRequest.url);
   }
+  localRequest.url = sanitizeRequestUrl(localRequest.url);
+  const requestTarget = buildDownstreamRequestOptions(localRequest.url);
   const proxyUri = getProxyForUrl(localRequest.url);
   if (proxyUri) {
     bootstrap({
@@ -176,17 +213,18 @@ export const makeStreamingRequestToDownstream = (
   localRequest.headers['x-broker-origin-ua'] =
     localRequest.headers['user-agent'] ?? 'not-provided';
   localRequest.headers['user-agent'] = `Snyk Broker Client ${version}`;
-  const httpClient = localRequest.url.startsWith('https') ? https : http;
+  const httpClient = requestTarget.useHttps ? https : http;
   const options: http.RequestOptions = {
+    hostname: requestTarget.hostname,
+    port: requestTarget.port,
+    path: requestTarget.path,
     method: localRequest.method,
     headers: localRequest.headers as any,
   };
 
   return new Promise<http.IncomingMessage>((resolve, reject) => {
     try {
-      // deepcode ignore Ssrf: re-ignore after http client refactoring
       const request = httpClient.request(
-        localRequest.url,
         options,
         (response) => {
           if (
@@ -287,6 +325,8 @@ export const makeSingleRawRequestToDownstream = async (
   if (config.INSECURE_DOWNSTREAM) {
     localRequest.url = switchToInsecure(localRequest.url);
   }
+  localRequest.url = sanitizeRequestUrl(localRequest.url);
+  const requestTarget = buildDownstreamRequestOptions(localRequest.url);
   const proxyUri = getProxyForUrl(localRequest.url);
   if (proxyUri) {
     bootstrap({
@@ -299,15 +339,16 @@ export const makeSingleRawRequestToDownstream = async (
   const httpClient = localRequest.url.startsWith('https') ? https : http;
   const timeoutMs = req.timeoutMs ?? 0;
   const options: http.RequestOptions = {
+    hostname: requestTarget.hostname,
+    port: requestTarget.port,
+    path: requestTarget.path,
     method: localRequest.method,
     headers: localRequest.headers as any,
     timeout: timeoutMs,
   };
   return new Promise<HttpResponse>((resolve, reject) => {
     try {
-      // deepcode ignore Ssrf: re-ignore after http client refactoring
       const request = httpClient.request(
-        localRequest.url,
         options,
         (response) => {
           let data = '';

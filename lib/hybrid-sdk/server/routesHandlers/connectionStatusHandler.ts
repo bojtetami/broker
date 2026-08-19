@@ -5,6 +5,7 @@ import { log as logger } from '../../../logs/logger';
 import { hostname } from 'node:os';
 import { PostFilterPreparedRequest } from '../../../broker-workload/prepareRequest';
 import { makeStreamingRequestToDownstream } from '../../http/request';
+import { sanitizeRequestUrl, assertSafeForwardHostname } from '../../http/urlValidation';
 import { hashToken, maskToken } from '../../common/utils/token';
 
 export interface ClientSummary {
@@ -33,12 +34,14 @@ export const connectionStatusHandler = async (req: Request, res: Response) => {
       localHostname.endsWith('-1') &&
       localHostname.match(regex)
     ) {
+      assertSafeForwardHostname(req.hostname)
       const url = new URL(`http://${req.hostname}${req.url}`);
       url.hostname = req.hostname.replace(/-[0-9]{1,2}\./, '.');
+      assertSafeForwardHostname(url.hostname)
       url.searchParams.append('connection_role', 'primary');
 
       const postFilterPreparedRequest: PostFilterPreparedRequest = {
-        url: url.toString(),
+        url: sanitizeRequestUrl(url.toString()),
         headers: req.headers,
         method: req.method,
       };
