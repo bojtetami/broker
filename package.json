@@ -90,7 +90,7 @@
     "bunyan": "^1.8.12",
     "camelcase": "^5.3.1",
     "clarify": "^2.0.0",
-    "dotenv": "17.3.1",
+    "dotenv": "17.4.2",
     "ejson": "^2.2.0",
     "engine.io": "^6.6.7",
     "engine.io-client": "^5.2.0",
